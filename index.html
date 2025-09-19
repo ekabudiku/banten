@@ -2,18 +2,15 @@
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
-  <title>ZNT Banten</title>
+  <title>WebGIS Banten</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-   <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="icon" type="image/png" href="favicon.png">
   <style>
-    /* === Pengaturan Dasar === */
     html, body { 
         margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden;
     }
     #map { width: 100%; height: 100%; background-color: #f0f0f0; }
-
-    /* === Panel Samping === */
     #panel {
         position: absolute; top: 0; right: 0; width: 300px; height: 100%;
         background: rgba(255, 255, 255, 0.98); box-shadow: -2px 0 10px rgba(0,0,0,0.15);
@@ -24,16 +21,12 @@
     .panel-header { padding: 15px; border-bottom: 1px solid #ddd; }
     .panel-header h3 { margin: 0; font-size: 18px; }
     .panel-content { padding: 15px; overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 20px; }
-    
-    /* === Elemen Form di Panel === */
     select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; }
     label { font-weight: bold; margin-bottom: 5px; display: block; }
     input[type="range"] { width: 100%; cursor: pointer; }
     .layer-toggle { display: flex; align-items: center; gap: 10px; padding: 10px; background-color: #f0f0f0; border-radius: 6px; }
     .layer-toggle label { margin-bottom: 0; cursor: pointer; font-weight: normal; }
     .layer-toggle input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
-
-    /* === Kontrol Peta (Zoom, Lokasi, Toggle) === */
     .leaflet-control-container .leaflet-top.leaflet-right { top: 15px; right: 15px; }
     .custom-map-controls { background-color: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); overflow: hidden; }
     .custom-map-controls a {
@@ -42,22 +35,16 @@
     }
     .custom-map-controls a:last-child { border-bottom: none; }
     .custom-map-controls a:hover { background-color: #f4f4f4; }
-    #toggle-panel { display: none; } /* Sembunyikan di desktop */
-
-    /* === Legenda === */
+    #toggle-panel { display: none; }
     #legend { position: absolute; bottom: 15px; left: 15px; z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 6px; font-size: 13px; line-height: 1.6; box-shadow: 0 2px 8px rgba(0,0,0,0.2); max-height: 40vh; overflow-y: auto; }
     .legend-item { display: flex; align-items: center; margin-bottom: 3px; }
     .legend-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0; }
-
-    /* === Styling untuk Label Zona === */
     .text-label {
         background: transparent; border: none; box-shadow: none;
         color: #222; font-weight: bold; font-size: 12px;
         text-shadow: 1px 1px 2px #FFFFFF, -1px 1px 2px #FFFFFF, 1px -1px 2px #FFFFFF, -1px -1px 2px #FFFFFF;
         white-space: nowrap;
     }
-    
-    /* === ATURAN RESPONSIVE === */
     @media (max-width: 768px) {
         #panel { display: flex; }
         #toggle-panel { display: block; }
@@ -74,7 +61,6 @@
 <body>
 
 <div id="map"></div>
-
 <div id="panel">
   <div class="panel-header"><h3>Kontrol Peta</h3></div>
   <div class="panel-content">
@@ -98,18 +84,27 @@
     </div>
   </div>
 </div>
-
 <div id="legend"><strong>Legenda</strong><div id="legendContent"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  /* ---------- Konfigurasi & Inisialisasi Peta ---------- */
   const map = L.map('map', { zoomControl: false }).setView([-6.65, 106.25], 10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+  
+  const baseLayers = {
+      'Street Map': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+      }),
+      'Satelit': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri'
+      }),
+      'Peta Gelap': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; CartoDB'
+      })
+  };
 
-  /* ---------- Kontrol Peta Kustom (dibuat dengan Leaflet) ---------- */
+  baseLayers['Street Map'].addTo(map);
+  L.control.layers(baseLayers, null, { position: 'topleft' }).addTo(map);
+
   L.Control.Custom = L.Control.extend({
       onAdd: function(map) {
           const container = L.DomUtil.create('div', 'leaflet-bar custom-map-controls');
@@ -128,36 +123,21 @@
   });
   new L.Control.Custom({ position: 'topright' }).addTo(map);
 
-  /* ---------- Variabel & Konfigurasi Global ---------- */
   const DATA_DIR = 'assets/data/';
   const LIST_FILE = [
-    "0001_9101014211000002.geojson",
-    "0001_3326106006020004.geojson",
-    "0001_3211222201860004.geojson",
-    "0001_3273021408990011.geojson",
-    "0001_3207182412940001.geojson",
-    "0001_3273140907780001.geojson",
-    "0001_3273102412980001.geojson",
-    "0001_3204082908940004.geojson",
-    "0001_3272062511850001.geojson",
-    "0001_1771012011920005.geojson",
-    "0001_1509040810960003.geojson",
-    "0001_3273100404010001.geojson",
-    "0001_3305232905020001.geojson",
-    "0001_3204352405010006.geojson",
-    "0001_3273040905960004.geojson",
-    "0001_1509042608950004.geojson",
-    "0001_3204072001990001.geojson",
-    "0001_3204351307040003.geojson",
-    "0001_3204302801010002.geojson",
-    "0001_3211140411870013.geojson"
+    "0001_9101014211000002.geojson", "0001_3326106006020004.geojson", "0001_3211222201860004.geojson",
+    "0001_3273021408990011.geojson", "0001_3207182412940001.geojson", "0001_3273140907780001.geojson",
+    "0001_3273102412980001.geojson", "0001_3204082908940004.geojson", "0001_3272062511850001.geojson",
+    "0001_1771012011920005.geojson", "0001_1509040810960003.geojson", "0001_3273100404010001.geojson",
+    "0001_3305232905020001.geojson", "0001_3204352405010006.geojson", "0001_3273040905960004.geojson",
+    "0001_1509042608950004.geojson", "0001_3204072001990001.geojson", "0001_3204351307040003.geojson",
+    "0001_3204302801010002.geojson", "0001_3211140411870013.geojson"
   ];
   let currentOpacity = 0.7;
   let pointsLayer = null;
   let labelsLayer = null;
-
-  /* --- Fungsi-fungsi Inti (Warna, Legenda, Layer) --- */
   const colorCache = {};
+  
   function kColor(k_in){
     const k = String(k_in);
     if(colorCache[k]) return colorCache[k];
@@ -228,14 +208,12 @@
       if (!map.hasLayer(labelsLayer)) map.addLayer(labelsLayer);
   }
   
-  // DIPERBAIKI: Fungsi untuk menutup panel di mobile
   function closePanelOnMobile() {
       if (window.innerWidth <= 768) {
           document.getElementById('panel').classList.remove('open');
       }
   }
 
-  /* ---------- Event Listeners & Inisialisasi ---------- */
   (function init() {
     const zonaSelect = document.getElementById('zonaSelect');
     const transparencySlider = document.getElementById('transparencySlider');
@@ -259,13 +237,12 @@
       if (v) {
         addLayer(v).then(() => {
           toggleLabels();
-          // DIPERBAIKI: Pastikan titik selalu di atas setelah zona baru dimuat
           if (pointsLayer && map.hasLayer(pointsLayer)) {
             pointsLayer.bringToFront();
           }
         });
       }
-      closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
+      closePanelOnMobile();
     };
 
     transparencySlider.addEventListener('input', (e) => {
@@ -304,12 +281,12 @@
         } else {
             if (pointsLayer) map.removeLayer(pointsLayer);
         }
-        closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
+        closePanelOnMobile();
     });
     
     labelsToggle.addEventListener('change', () => {
         toggleLabels();
-        closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
+        closePanelOnMobile();
     });
 
     map.on('click', () => { document.getElementById('panel').classList.remove('open'); });
@@ -319,4 +296,3 @@
 </script>
 </body>
 </html>
-
