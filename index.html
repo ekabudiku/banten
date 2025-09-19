@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
-  <title>WebGIS Final + Kontrol Layer</title>
+  <title>WebGIS Final + Kontrol Layer & Label</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
@@ -29,7 +29,7 @@
     label { font-weight: bold; margin-bottom: 5px; display: block; }
     input[type="range"] { width: 100%; cursor: pointer; }
     .layer-toggle { display: flex; align-items: center; gap: 10px; padding: 10px; background-color: #f0f0f0; border-radius: 6px; }
-    .layer-toggle label { margin-bottom: 0; cursor: pointer; }
+    .layer-toggle label { margin-bottom: 0; cursor: pointer; font-weight: normal; }
     .layer-toggle input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 
     /* === Kontrol Peta (Zoom, Lokasi, Toggle) === */
@@ -48,6 +48,14 @@
     .legend-item { display: flex; align-items: center; margin-bottom: 3px; }
     .legend-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0; }
 
+    /* === Styling untuk Label Zona === */
+    .text-label {
+        background: transparent; border: none; box-shadow: none;
+        color: #222; font-weight: bold; font-size: 12px;
+        text-shadow: 1px 1px 2px #FFFFFF, -1px 1px 2px #FFFFFF, 1px -1px 2px #FFFFFF, -1px -1px 2px #FFFFFF;
+        white-space: nowrap;
+    }
+    
     /* === ATURAN RESPONSIVE === */
     @media (max-width: 768px) {
         #panel { display: flex; }
@@ -82,12 +90,13 @@
     <div class="layer-toggle">
       <input type="checkbox" id="pointsToggle">
       <label for="pointsToggle">Tampilkan Titik Sampel</label>
-      
+    </div>
+    <div class="layer-toggle">
+      <input type="checkbox" id="labelsToggle">
+      <label for="labelsToggle">Tampilkan Label Zona</label>
     </div>
   </div>
 </div>
-
-
 
 <div id="legend"><strong>Legenda</strong><div id="legendContent"></div></div>
 
@@ -129,8 +138,9 @@
     "0001_1509042608950004.geojson", "0001_3204072001990001.geojson", "0001_3204351307040000.geojson",
     "0001_3204302801010000.geojson", "0001_3211140411870010.geojson"
   ];
-  let currentOpacity = 0.7; // Variabel untuk menyimpan nilai transparansi
-  let pointsLayer = null; // Variabel untuk menyimpan layer titik sampel
+  let currentOpacity = 0.7;
+  let pointsLayer = null;
+  let labelsLayer = null; // Variabel untuk layer label
 
   /* --- Fungsi-fungsi Inti (Warna, Legenda, Layer) --- */
   const colorCache = {};
@@ -181,11 +191,47 @@
       .catch(err => { console.error('Gagal memuat layer:', f, err); alert(`Gagal memuat file zona: ${f}.\n\nError: ${err.message}`); });
   }
 
+  // --- Fungsi untuk menampilkan/menyembunyikan label ---
+  function toggleLabels() {
+      if (!labelsLayer) return;
+      labelsLayer.clearLayers();
+      const labelsOn = document.getElementById('labelsToggle').checked;
+
+      if (!labelsOn) {
+          if (map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+          return;
+      }
+      
+      // Iterasi setiap layer zona yang aktif
+      Object.values(layers).forEach(layer => {
+          layer.eachLayer(featureLayer => {
+              const props = featureLayer.feature.properties;
+              if (props && props.kode) {
+                  const center = featureLayer.getBounds().getCenter();
+                  const label = L.marker(center, {
+                      icon: L.divIcon({
+                          className: 'text-label',
+                          html: `<div>${props.kode}</div>`
+                      }),
+                      interactive: false, // Label tidak bisa diklik
+                      pane: 'shadowPane'  // Pane agar label di atas poligon tapi di bawah titik
+                  }).addTo(labelsLayer);
+              }
+          });
+      });
+
+      if (!map.hasLayer(labelsLayer)) map.addLayer(labelsLayer);
+  }
+
   /* ---------- Event Listeners & Inisialisasi ---------- */
   (function init() {
     const zonaSelect = document.getElementById('zonaSelect');
     const transparencySlider = document.getElementById('transparencySlider');
     const pointsToggle = document.getElementById('pointsToggle');
+    const labelsToggle = document.getElementById('labelsToggle');
+    
+    // Inisialisasi layer group untuk label
+    labelsLayer = L.layerGroup();
 
     // Isi dropdown zona
     LIST_FILE.forEach((file, i) => {
@@ -198,17 +244,23 @@
     zonaSelect.onchange = e => {
       const v = e.target.value;
       Object.keys(layers).forEach(remLayer);
-      legendSet.clear(); updateLegend();
-      if (v) addLayer(v);
+      legendSet.clear(); 
+      updateLegend();
+      toggleLabels(); // Hapus label lama
+      if (v) {
+        addLayer(v).then(() => {
+          toggleLabels(); // Tambahkan label baru jika toggle aktif
+        });
+      }
       if (window.innerWidth <= 768) { document.getElementById('panel').classList.remove('open'); }
     };
 
     // Event listener untuk slider transparansi
     transparencySlider.addEventListener('input', (e) => {
         currentOpacity = parseFloat(e.target.value);
-        Object.keys(layers).forEach(key => {
-            if (layers[key]) {
-                layers[key].setStyle({ fillOpacity: currentOpacity });
+        Object.values(layers).forEach(layer => {
+            if (layer) {
+                layer.setStyle({ fillOpacity: currentOpacity });
             }
         });
     });
@@ -218,18 +270,19 @@
         if (e.target.checked) {
             if (pointsLayer) {
                 map.addLayer(pointsLayer);
+                pointsLayer.bringToFront(); // Pastikan di atas
             } else {
                 fetch(DATA_DIR + 'titiksample.geojson')
                     .then(res => res.json())
                     .then(data => {
                         pointsLayer = L.geoJSON(data, {
-                            pointToLayer: function(feature, latlng) {
+                            pointToLayer: (feature, latlng) => {
                                 return L.circleMarker(latlng, {
                                     radius: 5, fillColor: "#ff7800", color: "#000",
                                     weight: 1, opacity: 1, fillOpacity: 0.8
                                 });
                             },
-                            onEachFeature: function(feature, layer) {
+                            onEachFeature: (feature, layer) => {
                                 let popupContent = '<b>Info Sampel</b><br>';
                                 for (const key in feature.properties) {
                                     popupContent += `${key}: ${feature.properties[key]}<br>`;
@@ -237,6 +290,7 @@
                                 layer.bindPopup(popupContent);
                             }
                         }).addTo(map);
+                        pointsLayer.bringToFront(); // Pastikan di atas saat pertama kali dimuat
                     })
                     .catch(err => alert('Gagal memuat titiksample.geojson: ' + err));
             }
@@ -244,6 +298,9 @@
             if (pointsLayer) { map.removeLayer(pointsLayer); }
         }
     });
+    
+    // Event listener untuk toggle label
+    labelsToggle.addEventListener('change', toggleLabels);
 
     map.on('click', () => { document.getElementById('panel').classList.remove('open'); });
     map.on('locationfound', (e) => { L.marker(e.latlng).addTo(map).bindPopup(`Anda berada di sini.`).openPopup(); });
