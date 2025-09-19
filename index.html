@@ -130,7 +130,7 @@
   /* ---------- Variabel & Konfigurasi Global ---------- */
   const DATA_DIR = 'assets/data/';
   const LIST_FILE = [
-  "0001_9101014211000002.geojson",
+    "0001_9101014211000002.geojson",
     "0001_3326106006020004.geojson",
     "0001_3211222201860004.geojson",
     "0001_3273021408990011.geojson",
@@ -150,10 +150,10 @@
     "0001_3204351307040003.geojson",
     "0001_3204302801010002.geojson",
     "0001_3211140411870013.geojson"
-];
+  ];
   let currentOpacity = 0.7;
   let pointsLayer = null;
-  let labelsLayer = null; // Variabel untuk layer label
+  let labelsLayer = null;
 
   /* --- Fungsi-fungsi Inti (Warna, Legenda, Layer) --- */
   const colorCache = {};
@@ -204,36 +204,34 @@
       .catch(err => { console.error('Gagal memuat layer:', f, err); alert(`Gagal memuat file zona: ${f}.\n\nError: ${err.message}`); });
   }
 
-  // --- Fungsi untuk menampilkan/menyembunyikan label ---
   function toggleLabels() {
       if (!labelsLayer) return;
       labelsLayer.clearLayers();
       const labelsOn = document.getElementById('labelsToggle').checked;
-
       if (!labelsOn) {
           if (map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
           return;
       }
-      
-      // Iterasi setiap layer zona yang aktif
       Object.values(layers).forEach(layer => {
           layer.eachLayer(featureLayer => {
               const props = featureLayer.feature.properties;
               if (props && props.kode) {
                   const center = featureLayer.getBounds().getCenter();
-                  const label = L.marker(center, {
-                      icon: L.divIcon({
-                          className: 'text-label',
-                          html: `<div>${props.kode}</div>`
-                      }),
-                      interactive: false, // Label tidak bisa diklik
-                      pane: 'shadowPane'  // Pane agar label di atas poligon tapi di bawah titik
+                  L.marker(center, {
+                      icon: L.divIcon({ className: 'text-label', html: `<div>${props.kode}</div>` }),
+                      interactive: false, pane: 'shadowPane'
                   }).addTo(labelsLayer);
               }
           });
       });
-
       if (!map.hasLayer(labelsLayer)) map.addLayer(labelsLayer);
+  }
+  
+  // DIPERBAIKI: Fungsi untuk menutup panel di mobile
+  function closePanelOnMobile() {
+      if (window.innerWidth <= 768) {
+          document.getElementById('panel').classList.remove('open');
+      }
   }
 
   /* ---------- Event Listeners & Inisialisasi ---------- */
@@ -243,58 +241,53 @@
     const pointsToggle = document.getElementById('pointsToggle');
     const labelsToggle = document.getElementById('labelsToggle');
     
-    // Inisialisasi layer group untuk label
     labelsLayer = L.layerGroup();
 
-    // Isi dropdown zona
     LIST_FILE.forEach((file, i) => {
       const opt = document.createElement('option');
       opt.value = file; opt.textContent = 'Zona ' + (i + 1);
       zonaSelect.appendChild(opt);
     });
 
-    // Event listener untuk dropdown zona
     zonaSelect.onchange = e => {
       const v = e.target.value;
       Object.keys(layers).forEach(remLayer);
       legendSet.clear(); 
       updateLegend();
-      toggleLabels(); // Hapus label lama
+      toggleLabels();
       if (v) {
         addLayer(v).then(() => {
-          toggleLabels(); // Tambahkan label baru jika toggle aktif
+          toggleLabels();
+          // DIPERBAIKI: Pastikan titik selalu di atas setelah zona baru dimuat
+          if (pointsLayer && map.hasLayer(pointsLayer)) {
+            pointsLayer.bringToFront();
+          }
         });
       }
-      if (window.innerWidth <= 768) { document.getElementById('panel').classList.remove('open'); }
+      closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
     };
 
-    // Event listener untuk slider transparansi
     transparencySlider.addEventListener('input', (e) => {
         currentOpacity = parseFloat(e.target.value);
         Object.values(layers).forEach(layer => {
-            if (layer) {
-                layer.setStyle({ fillOpacity: currentOpacity });
-            }
+            if (layer) layer.setStyle({ fillOpacity: currentOpacity });
         });
     });
 
-    // Event listener untuk toggle titik sampel
     pointsToggle.addEventListener('change', (e) => {
         if (e.target.checked) {
             if (pointsLayer) {
                 map.addLayer(pointsLayer);
-                pointsLayer.bringToFront(); // Pastikan di atas
+                pointsLayer.bringToFront();
             } else {
                 fetch(DATA_DIR + 'titiksample.geojson')
                     .then(res => res.json())
                     .then(data => {
                         pointsLayer = L.geoJSON(data, {
-                            pointToLayer: (feature, latlng) => {
-                                return L.circleMarker(latlng, {
-                                    radius: 5, fillColor: "#ff7800", color: "#000",
-                                    weight: 1, opacity: 1, fillOpacity: 0.8
-                                });
-                            },
+                            pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+                                radius: 5, fillColor: "#ff7800", color: "#000",
+                                weight: 1, opacity: 1, fillOpacity: 0.8
+                            }),
                             onEachFeature: (feature, layer) => {
                                 let popupContent = '<b>Info Sampel</b><br>';
                                 for (const key in feature.properties) {
@@ -303,17 +296,20 @@
                                 layer.bindPopup(popupContent);
                             }
                         }).addTo(map);
-                        pointsLayer.bringToFront(); // Pastikan di atas saat pertama kali dimuat
+                        pointsLayer.bringToFront();
                     })
                     .catch(err => alert('Gagal memuat titiksample.geojson: ' + err));
             }
         } else {
-            if (pointsLayer) { map.removeLayer(pointsLayer); }
+            if (pointsLayer) map.removeLayer(pointsLayer);
         }
+        closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
     });
     
-    // Event listener untuk toggle label
-    labelsToggle.addEventListener('change', toggleLabels);
+    labelsToggle.addEventListener('change', () => {
+        toggleLabels();
+        closePanelOnMobile(); // DIPERBAIKI: Panggil fungsi penutup panel
+    });
 
     map.on('click', () => { document.getElementById('panel').classList.remove('open'); });
     map.on('locationfound', (e) => { L.marker(e.latlng).addTo(map).bindPopup(`Anda berada di sini.`).openPopup(); });
@@ -322,5 +318,3 @@
 </script>
 </body>
 </html>
-
-
