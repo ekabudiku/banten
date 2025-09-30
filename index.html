@@ -70,6 +70,13 @@
         <option value="">-- Tampilkan Satu Zona --</option>
       </select>
     </div>
+    <!-- Tambahan dropdown bidang -->
+    <div>
+      <label for="bidangSelect">Pilih Bidang Tanah</label>
+      <select id="bidangSelect">
+        <option value="">-- Tampilkan Bidang Tanah --</option>
+      </select>
+    </div>
     <div>
       <label for="transparencySlider">Transparansi Zona</label>
       <input type="range" id="transparencySlider" min="0" max="1" step="0.05" value="0.7">
@@ -89,22 +96,16 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const map = L.map('map', { zoomControl: false }).setView([-6.65, 106.25], 10);
-  
-  const baseLayers = {
-      'Street Map': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors'
-      }),
-      'Satelit': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          attribution: 'Tiles &copy; Esri'
-      }),
-      'Peta Gelap': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; CartoDB'
-      })
-  };
 
+  const baseLayers = {
+      'Street Map': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }),
+      'Satelit': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }),
+      'Peta Gelap': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CartoDB' })
+  };
   baseLayers['Street Map'].addTo(map);
   L.control.layers(baseLayers, null, { position: 'topleft' }).addTo(map);
 
+  // kontrol custom
   L.Control.Custom = L.Control.extend({
       onAdd: function(map) {
           const container = L.DomUtil.create('div', 'leaflet-bar custom-map-controls');
@@ -124,20 +125,24 @@
   new L.Control.Custom({ position: 'topright' }).addTo(map);
 
   const DATA_DIR = 'assets/data/';
-  const LIST_FILE = [
-    "0001_9101014211000002.geojson", "0001_3326106006020004.geojson", "0001_3211222201860004.geojson",
-    "0001_3273021408990011.geojson", "0001_3207182412940001.geojson", "0001_3273140907780001.geojson",
-    "0001_3273102412980001.geojson", "0001_3204082908940004.geojson", "0001_3272062511850001.geojson",
-    "0001_1771012011920005.geojson", "0001_1509040810960003.geojson", "0001_3273100404010001.geojson",
-    "0001_3305232905020001.geojson", "0001_3204352405010006.geojson", "0001_3273040905960004.geojson",
-    "0001_1509042608950004.geojson", "0001_3204072001990001.geojson", "0001_3204351307040003.geojson",
-    "0001_3204302801010002.geojson", "0001_3211140411870013.geojson"
+  const ID_LIST = [
+    "0001_9101014211000002","0001_3326106006020004","0001_3211222201860004",
+    "0001_3273021408990011","0001_3207182412940001","0001_3273140907780001",
+    "0001_3273102412980001","0001_3204082908940004","0001_3272062511850001",
+    "0001_1771012011920005","0001_1509040810960003","0001_3273100404010001",
+    "0001_3305232905020001","0001_3204352405010006","0001_3273040905960004",
+    "0001_1509042608950004","0001_3204072001990001","0001_3204351307040003",
+    "0001_3204302801010002","0001_3211140411870013"
   ];
+
   let currentOpacity = 0.7;
   let pointsLayer = null;
   let labelsLayer = null;
+  let bidangLayer = null; 
   const colorCache = {};
-  
+  const legendSet = new Set();
+  const layers = {};
+
   function kColor(k_in){
     const k = String(k_in);
     if(colorCache[k]) return colorCache[k];
@@ -152,7 +157,6 @@
     return { color: '#333', weight: 1, fillColor: kColor(feature.properties.kode), fillOpacity: currentOpacity };
   }
 
-  const legendSet = new Set();
   function updateLegend(){
     const container = document.getElementById('legendContent'); container.innerHTML = '';
     const sortedKodes = Array.from(legendSet).sort();
@@ -164,15 +168,13 @@
     });
   }
 
-  const layers = {};
   function remLayer(f){ if(layers[f]){ map.removeLayer(layers[f]); delete layers[f]; } }
 
   function addLayer(f){
     if(layers[f]) return Promise.resolve();
     return fetch(DATA_DIR + f)
-      .then(res => { if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`); return res.json(); })
+      .then(res => res.json())
       .then(geo => {
-        if (geo.version && geo.oid && geo.size) throw new Error("File ini adalah pointer Git LFS, bukan GeoJSON.");
         layers[f] = L.geoJSON(geo, {
           style,
           onEachFeature: (feature, layer) => {
@@ -182,7 +184,7 @@
         }).addTo(map);
         updateLegend(); map.fitBounds(layers[f].getBounds());
       })
-      .catch(err => { console.error('Gagal memuat layer:', f, err); alert(`Gagal memuat file zona: ${f}.\n\nError: ${err.message}`); });
+      .catch(err => alert(`Gagal memuat file zona: ${f}`));
   }
 
   function toggleLabels() {
@@ -207,25 +209,49 @@
       });
       if (!map.hasLayer(labelsLayer)) map.addLayer(labelsLayer);
   }
-  
+
   function closePanelOnMobile() {
       if (window.innerWidth <= 768) {
           document.getElementById('panel').classList.remove('open');
       }
   }
 
-  (function init() {
+  // fungsi load bidang
+  function loadBidang(file){
+    if(bidangLayer){ map.removeLayer(bidangLayer); bidangLayer=null; }
+    if(!file) return;
+    fetch(DATA_DIR+file)
+      .then(res=>res.json())
+      .then(data=>{
+        bidangLayer = L.geoJSON(data,{
+          style:{color:'#006400',weight:2,fillColor:'#90EE90',fillOpacity:0.5},
+          onEachFeature:(f,l)=>{
+            let luas = f.properties.luas || f.properties.LUAS || f.properties.Luas_Bidang || "-";
+            l.bindPopup("<b>Bidang Tanah</b><br>Luas: "+luas+" m²");
+          }
+        }).addTo(map);
+        map.fitBounds(bidangLayer.getBounds());
+      })
+      .catch(err=>alert("Gagal memuat bidang: "+err));
+  }
+
+  (function init(){
     const zonaSelect = document.getElementById('zonaSelect');
+    const bidangSelect = document.getElementById('bidangSelect');
     const transparencySlider = document.getElementById('transparencySlider');
     const pointsToggle = document.getElementById('pointsToggle');
     const labelsToggle = document.getElementById('labelsToggle');
     
     labelsLayer = L.layerGroup();
 
-    LIST_FILE.forEach((file, i) => {
-      const opt = document.createElement('option');
-      opt.value = file; opt.textContent = 'Zona ' + (i + 1);
-      zonaSelect.appendChild(opt);
+    ID_LIST.forEach((id,i)=>{
+      let opt1=document.createElement("option");
+      opt1.value=id+".geojson"; opt1.textContent="Zona "+(i+1);
+      zonaSelect.appendChild(opt1);
+
+      let opt2=document.createElement("option");
+      opt2.value="persil_"+id+".geojson"; opt2.textContent="Bidang "+(i+1);
+      bidangSelect.appendChild(opt2);
     });
 
     zonaSelect.onchange = e => {
@@ -244,6 +270,8 @@
       }
       closePanelOnMobile();
     };
+
+    bidangSelect.onchange = e => { loadBidang(e.target.value); closePanelOnMobile(); };
 
     transparencySlider.addEventListener('input', (e) => {
         currentOpacity = parseFloat(e.target.value);
